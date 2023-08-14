@@ -1,0 +1,566 @@
+---
+title: Angular 自定义表单控件
+slug: angular-custom-formcontrol
+tags: ['Angular', 'TypeScript']
+cover: cover_1
+description: 本文将通过一个实例，逐步构建一个功能齐全的自定义表单控件，该控件兼容模板驱动（Template Driven）和响应式表单（Reactive Forms）两种方式，并支持所有内置和自定义表单验证器。
+---
+
+Angular Forms 和 ReactiveForms 模块都提供了一系列内置指令，可以将标准 HTML 元素（比如 input、checkbox、textarea 等）绑定到一个 form group。这些指令包括 ngModel、formControl、formControlName、formGroup、formArray 等，它们可以用来实现表单数据的双向绑定、表单验证、表单提交等功能。
+
+在工作中，除了标准的 HTML 元素，我们可能还需要使用自定义表单控件，例如下拉框、选择框、切换按钮等常用自定义表单组件。对于这些自定义控件，我们希望能够使用完全相同的指令，就像在标准 HTML input 中使用的那样。
+
+本文将通过一个实例，逐步构建一个功能齐全的自定义表单控件，该控件兼容模板驱动（Template Driven）和响应式表单（Reactive Forms）两种方式，并支持所有内置和自定义表单验证器。
+
+简单来说，如果我们使用的是模板驱动表单，我们可以通过使用 ngModel 将自定义组件插入到表单中；如果使用的是响应式表单，我们可以使用 formControlName 或 formControl 将自定义组件添加到表单中。
+
+## 原生表单控件
+
+为了了解如何构建自定义表单控件，我们首先需要了解 Angular 内置的原生表单控件是如何工作的。内置表单控件的目标是原生 HTML 元素比如 input、checkbox、textarea 等。
+
+先来看一个例子：
+
+```typescript
+import { Component } from '@angular/core';
+import { FormControl, FormGroup } from '@angular/forms';
+
+@Component({
+  selector: 'app-root',
+  template: `
+    <div [formGroup]="form">
+      <input placeholder="Title" formControlName="title" />
+      <input type="checkbox" formControlName="free" />
+      <textarea formControlName="description"></textarea>
+    </div>
+  `,
+})
+export class AppComponent {
+  form = new FormGroup({
+    title: new FormControl(),
+    free: new FormControl(),
+    description: new FormControl(),
+  });
+}
+```
+
+可以看到，有三个 HTML 表单控件并且应用了 `formControlName` 属性，这就是 HTML 元素绑定到表单的方式。
+
+每当用户与表单交互时，表单值会自动重新计算。那么 Angular 是如何做到的呢？
+
+### 原理
+
+实际上，Angular 表单模块在底层会为每个原生 HTML 元素应用一个内置的 Angular 指令，该指令实现了 `ControlValueAccessor` 接口， 负责跟踪字段的值，并将其传递回父表单。
+
+以上面的复选框为例，有一个内置指令，它是响应式表单模块的一部分，专门用于跟踪复选框的值。
+
+```typescript
+@Directive({
+  selector:
+      'input[type=checkbox][formControlName],
+       input[type=checkbox][formControl],
+       input[type=checkbox][ngModel]',
+
+})
+export class CheckboxControlValueAccessor implements ControlValueAccessor {
+....
+}
+```
+
+我们从 `selector` 属性中可以看到，这个指令专门针对 HTML 类型为 checkbox 的 input 元素，但仅当 `ngModel`、`formControl` 或 `formControlName` 属性应用在这个元素上时才有效。
+
+对于其他类型的标准 HTML 表单，Angular Forms 模块里也有对应的指令实现。
+
+所以如果我们想要实现一个自定义表单控件，我们必须实现 `ControlValueAccessor` 接口。
+
+## 自定义表单
+
+假设我们想构建一个自定义表单控件 - 数字计数器，带有增加和减少按钮，例如用来选择订单数量。
+
+每次点击按钮时，计数器会按照配置的数量增加或减少。
+
+Angular 内置的表单元素是自带验证功能的，我们的自定义组件也可以指定表单允许的最大值，如果不符合范围，将表单标记为 invalid。
+
+首先创建一个组件，内容如下：
+
+```typescript
+@Component({
+  selector: 'app-choose-quantity',
+  template: `
+    <div class="choose-quantity">
+      <mat-icon (click)="onRemove()" color="primary"
+        >indeterminate_check_box</mat-icon
+      >
+      <div class="quantity">{{ quantity }}</div>
+      <mat-icon (click)="onAdd()" color="primary">add_box</mat-icon>
+    </div>
+  `,
+  styleUrls: ['./choose-quantity.component.scss'],
+})
+export class ChooseQuantityComponent {
+  quantity = 0;
+
+  @Input() increment = 1;
+
+  onAdd() {
+    this.quantity += this.increment;
+  }
+
+  onRemove() {
+    this.quantity -= this.increment;
+  }
+}
+```
+
+现在这个组件既不支持 `ngModel` 又不支持 `formControlName`，我们期望的写法是和原生 HTML 元素一样，可以把这些指令应用到自定义表单中，用法如下：
+
+```html
+<div [formGroup]="form">
+  ...
+  <app-choose-quantity formControlName="totalQuantity"></app-choose-quantity>
+</div>
+```
+
+我们还希望这个组件与内置的验证器兼容，并使用它们来使字段变为必填项并设置最大值：
+
+```typescript
+export class AppComponent {
+  form = new FormGroup({
+    totalQuantity: new FormControl([
+      10,
+      [Validators.required, Validators.max(100)],
+    ]),
+  });
+}
+```
+
+为了实现这个功能，我们需要让组件实现 `ControlValueAccessor` 接口。
+
+### ControlValueAccessor
+
+我们先来了解一下 `ControlValueAccessor` 这个接口，看一下它有哪些方法。值得注意的是，这些方法都是 Angular 框架本身的 callback，不应该被我们的代码直接调用。
+
+所有这些方法都只能在 Forms 模块运行时调用，充当 Angular 表单 API 和 DOM 中的原生元素之间的桥梁。
+
+下面是这个接口的方法：
+
+- **writeValue**： 由 Angular 表单模块调用，用于将一个值写入表单控件中。
+
+- **registerOnChange**：注册一个回调函数。当表单值因用户输入而发生更改时，我们需要将该值报告回父表单。这是通过调用最初使用 `registerOnChange` 方法在控件上注册的回调函数来实现的。
+
+- **registerOnTouched**: 当用户首次与表单控件交互时，该控件被视为 `touched` 状态，这对于修改样式很有用。为了向父表单报告控件已被 `touched`，我们需要使用通过 `registerOnTouched` 方法注册的回调函数。
+
+- **setDisabledState**: 表单控件可以使用 Forms API 启用和禁用。该状态可以通过`setDisabledState`方法传递给表单控件。
+
+以下是已经实现了 `ControlValueAccessor` 接口的组件示例：
+
+```typescript
+import { Component, Input } from '@angular/core';
+import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
+
+@Component({
+  selector: 'app-choose-quantity',
+  template: `
+    <div class="choose-quantity">
+      <mat-icon (click)="onRemove()" color="primary"
+        >indeterminate_check_box</mat-icon
+      >
+      <div class="quantity">{{ quantity }}</div>
+      <mat-icon (click)="onAdd()" color="primary">add_box</mat-icon>
+    </div>
+  `,
+  styleUrls: ['./choose-quantity.component.scss'],
+  providers: [
+    {
+      provide: NG_VALUE_ACCESSOR,
+      multi: true,
+      useExisting: ChooseQuantityComponent,
+    },
+  ],
+})
+export class ChooseQuantityComponent implements ControlValueAccessor {
+  quantity = 0;
+
+  @Input() increment = 1;
+
+  onChange = (quantity: number) => {};
+
+  onTouched = () => {};
+
+  touched = false;
+
+  disabled = false;
+
+  onAdd() {
+    this.markAsTouched();
+    if (!this.disabled) {
+      this.quantity += this.increment;
+      this.onChange(this.quantity);
+    }
+  }
+
+  onRemove() {
+    this.markAsTouched();
+    if (!this.disabled) {
+      this.quantity -= this.increment;
+      this.onChange(this.quantity);
+    }
+  }
+
+  writeValue(quantity: number): void {
+    this.quantity = quantity;
+  }
+
+  registerOnChange(onChange: any): void {
+    this.onChange = onChange;
+  }
+
+  registerOnTouched(onTouched: any): void {
+    this.onTouched = onTouched;
+  }
+
+  setDisabledState?(isDisabled: boolean): void {
+    this.disabled = isDisabled;
+  }
+
+  markAsTouched() {
+    if (!this.touched) {
+      this.onTouched();
+      this.touched = true;
+    }
+  }
+}
+```
+
+现在我们逐个方法来进行讲解：
+
+#### writeValue()
+
+每当父表单希望在子控件中设置一个值时，Angular 表单模块都会调用 `writeValue` 方法。对于我们的示例组件，我们直接将这个值赋值内部的给 `quantity` 属性。
+
+```typescript
+writeValue(quantity: number): void {
+    this.quantity = quantity;
+  }
+```
+
+#### registerOnChange()
+
+父组件可以通过 `setValue` 在子控件中设置一个值，但是反过来呢？如果用户与表单进行交互，增加或减少计数器的值，那么新值需要被传递回父表单。子控件可以通过使用回调函数通知父表单有新的值。
+
+要实现这个功能，第一步是让父表单使用 `registerOnChange` 方法向子控件注册回调函数：
+
+```typescript
+onChange = (quantity: number) => {};
+
+registerOnChange(onChange: any): void {
+  this.onChange = onChange;
+}
+```
+
+当调用这个方法时，我们将接收到回调函数，并将其保存在一个成员变量中以供以后使用。
+
+当计数器的值通过点击增加或减少按钮进行更改时，我们需要通知父表单有新的值可用。我们会调用回调函数并将新值告诉父表单：
+
+```typescript
+onAdd() {
+  this.quantity += this.increment;
+  this.onChange(this.quantity);
+}
+
+onRemove() {
+  this.quantity -= this.increment;
+  this.onChange(this.quantity);
+}
+```
+
+#### registerOnTouched
+
+除了将新值报告给父表单外，我们还需要通知父表单 `touched` 状态。当表单初始化时，每个表单控件都被视为 `untouched` 状态，当用户与子组件进行交互时，表单会被认为是 `touched` 状态，一些相关的 CSS 也会应用于表单。所以我们的自定义表单也要支持这个特性。
+
+和 `registerOnChange` 一样，我们也需要注册一个回调函数，以便子组件向父组件报告 `touched` 状态。
+
+```typescript
+registerOnTouched(onTouched: any): void {
+  this.onTouched = onTouched;
+}
+```
+
+我们现在需要在控件被认为是 `touched` 状态时调用这个回调函数，对我们的控件来说，就是用户在点击增加或减少按钮时触发。
+
+```typescript
+onAdd() {
+  this.markAsTouched();
+  ...
+}
+
+onRemove() {
+  this.markAsTouched();
+  ...
+}
+
+markAsTouched() {
+  if (!this.touched) {
+    this.onTouched();
+    this.touched = true;
+  }
+}
+```
+
+打开 devtools 可以看到，在第一次点击控件的时候，class 会从 `ng-untouched` 变为 `ng-touched`。
+
+![截屏2023-05-20 16.07.35](https://notes-1312649150.cos.ap-shanghai.myqcloud.com/%E6%88%AA%E5%B1%8F2023-05-20%2016.07.35.png)
+
+父表单还可以通过调用 `setDisabledState` 方法来启用或禁用其任何子控件。我们可以将禁用状态保存在成员变量 `disabled` 中，并使用它来打开和关闭增加/减少功能：
+
+```typescript
+setDisabledState(disabled: boolean) {
+  this.disabled = disabled;
+}
+```
+
+#### 依赖注入配置
+
+最后，实现正确的 ControlValueAccessor 接口的最后一步是在依赖注入系统中将自定义表单控件注册为已知值访问器：
+
+```typescript
+@Component({
+  selector: 'app-choose-quantity',
+  ...
+  providers: [
+    {
+      provide: NG_VALUE_ACCESSOR,
+      multi: true,
+      useExisting: ChooseQuantityComponent
+    }
+  ]
+})
+export class ChooseQuantityComponent implements ControlValueAccessor {}
+```
+
+这个配置把我们的组件添加到了已知的 value accessor 列表中进行注册。并且 `multi` 设置为 `true`，因为所有的内置的 value accessor 和我们自定义都是在 `NG_VALUE_ACCESSOR` 下注册的，这样 Angular 表单模块需要完整的所有 value accessors 时，只需要注入 `NG_VALUE_ACCESSOR` 就可以了。
+
+通过这样的配置，我们的组件现在能够设置表单中属性的值。并且，组件现在能够做到内置的表单验证，比如 required 和 max 等。
+
+## 自定义验证器
+
+对于自定义控件来说，内置的表单验证往往是不够的，比如在我们的示例控件中，`quantity` 代表了购买的数量，所以必须是一个正整数，如果是负数需要把表单标记成 error 状态。
+
+接下来我们来看一下怎么实现自定义的表单验证。
+
+### Validator 接口
+
+为了实现这个逻辑，我们的组件需要实现 `Validator` 接口，这个接口只包含两个方法：
+
+- **validate**：这个方法用于验证表单控件的当前值。每当新值被报告给父表单时，这个方法都会被调用。如果未发现错误，那么这个方法需要返回 null；如果发现错误，则需要返回一个错误对象，其中包含所有必要的细节，方便正确显示给用户一个有意义的错误信息。
+
+- `registerOnValidatorChange`：这个方法用于注册一个回调函数，允许我们在需要时手动触发自定义控件的验证。当有新的值被发出时，我们不需要执行此操作，因为在这种情况下已经会触发验证。只有在其他影响 validate 方法行为的输入发生变化时，我们才需要调用这个方法。
+
+现在让我们来看看如何实现这个接口。
+
+### 实现 Validator 接口
+
+实际上我们唯一需要实现的方法就是 `validate` 方法：
+
+```typescript
+validate(control: AbstractControl): ValidationErrors | null {
+  const quantity = control.value;
+
+  if (quantity <= 0) {
+    return {
+      mustBePositive: {
+        quantity
+      }
+    };
+  }
+
+  return null;
+}
+```
+
+在这个实现中，如果值是有效的，我们就返回 `null`，如果存在错误，则返回一个包含错误细节的对象。
+
+在我们的示例中，不需要实现 `registerOnValidatorChange`，因为这个方法是可选的。如果我们的组件具有可配置的验证规则，比如依赖于组件的输入属性，如果是这种情况，在输入属性发生改变时，我们可能需要触发新的验证。
+
+在我们的示例中，`validate` 实现只依赖当前表单的值，所以我们不需要实现 `registerOnValidatorChange`。
+
+为了使 `Validation` 接口正常工作，我们还需要使用 `NG_VALIDATORS` 注入令牌来注册我们的自定义组件。
+
+```typescript
+@Component({
+  selector: 'app-choose-quantity',
+  ...
+  providers: [
+    {
+      provide: NG_VALIDATORS,
+      multi: true,
+      useExisting: ChooseQuantityComponent
+    }
+  ]
+})
+export class ChooseQuantityComponent implements ControlValueAccessor {}
+```
+
+## 完整代码
+
+通过使用 `ControlValueAccessor` 和 `Validator` 这两个接口，我们现在拥有一个完全功能的自定义表单控件，它既兼容响应式表单，又兼容模板驱动表单，能够设置表单属性的值，并参与表单验证过程。
+
+这是最终的代码：
+
+```typescript
+import { Component, Input } from '@angular/core';
+import {
+  AbstractControl,
+  ControlValueAccessor,
+  NG_VALIDATORS,
+  NG_VALUE_ACCESSOR,
+  ValidationErrors,
+  Validator,
+} from '@angular/forms';
+
+@Component({
+  selector: 'app-choose-quantity',
+  template: `
+    <div class="choose-quantity">
+      <mat-icon (click)="onRemove()" color="primary"
+        >indeterminate_check_box</mat-icon
+      >
+      <div class="quantity">{{ quantity }}</div>
+      <mat-icon (click)="onAdd()" color="primary">add_box</mat-icon>
+    </div>
+  `,
+  styleUrls: ['./choose-quantity.component.scss'],
+  providers: [
+    {
+      provide: NG_VALUE_ACCESSOR,
+      multi: true,
+      useExisting: ChooseQuantityComponent,
+    },
+    {
+      provide: NG_VALIDATORS,
+      multi: true,
+      useExisting: ChooseQuantityComponent,
+    },
+  ],
+})
+export class ChooseQuantityComponent
+  implements ControlValueAccessor, Validator
+{
+  quantity = 0;
+
+  @Input() increment = 1;
+
+  onChange = (quantity: number) => {};
+
+  onTouched = () => {};
+
+  touched = false;
+
+  disabled = false;
+
+  onAdd() {
+    this.markAsTouched();
+    if (!this.disabled) {
+      this.quantity += this.increment;
+      this.onChange(this.quantity);
+    }
+  }
+
+  onRemove() {
+    this.markAsTouched();
+    if (!this.disabled) {
+      this.quantity -= this.increment;
+      this.onChange(this.quantity);
+    }
+  }
+
+  writeValue(quantity: number): void {
+    this.quantity = quantity;
+  }
+
+  registerOnChange(onChange: any): void {
+    this.onChange = onChange;
+  }
+
+  registerOnTouched(onTouched: any): void {
+    this.onTouched = onTouched;
+  }
+
+  setDisabledState?(isDisabled: boolean): void {
+    this.disabled = isDisabled;
+  }
+
+  markAsTouched() {
+    if (!this.touched) {
+      this.onTouched();
+      this.touched = true;
+    }
+  }
+
+  validate(control: AbstractControl): ValidationErrors | null {
+    const quantity = control.value;
+
+    if (quantity <= 0) {
+      return {
+        mustBePositive: {
+          quantity,
+        },
+      };
+    }
+
+    return null;
+  }
+}
+```
+
+## 测试用例
+
+接下来让我们测试一下我们的自定义控件，创建这个表单并且添加一些标准验证：
+
+```typescript
+import { Component } from '@angular/core';
+import { FormControl, FormGroup, Validators } from '@angular/forms';
+
+@Component({
+  selector: 'app-root',
+  template: `
+    <div [formGroup]="form">
+      <app-choose-quantity
+        formControlName="totalQuantity"
+      ></app-choose-quantity>
+    </div>
+
+    <div *ngIf="totalQuantity?.errors?.['max']">Max value is 20</div>
+    <div *ngIf="totalQuantity?.errors?.['mustBePositive']">
+      Value shoue be positive
+    </div>
+  `,
+})
+export class AppComponent {
+  form = new FormGroup({
+    totalQuantity: new FormControl(10, [
+      Validators.required,
+      Validators.max(20),
+    ]),
+  });
+
+  totalQuantity = this.form.get('totalQuantity');
+}
+```
+
+我们的代码里有两个 `*ngIf` 指令，当满足条件时会展示对应的错误信息。
+
+运行代码，在 UI 上通过增加或减少 `quantity` 的值，当值大于 20 时，会显示 max 20 对应的错误信息：
+
+![截屏2023-05-21 16.07.49](https://notes-1312649150.cos.ap-shanghai.myqcloud.com/%E6%88%AA%E5%B1%8F2023-05-21%2016.07.49.png)
+
+相反，当减少值到小于等于 0 时，`errors` 对象会包含我们自定义的 `mustBePositive` 对象，会展示如下信息：
+
+![截屏2023-05-21 16.08.06](https://notes-1312649150.cos.ap-shanghai.myqcloud.com/%E6%88%AA%E5%B1%8F2023-05-21%2016.08.06.png)
+
+到目前为止，我们已经实现了一个功能齐全的自定义表单控件，并且兼容模版驱动表单、响应式表单和所有的内置验证器。
+
+## 总结
+
+每个表单控件都会链接到一个控件值访问器，负责表单控件和父表单之间的交互。Angular 为所有标准的 HTML 表单控件都提供了内置的控件值访问器。
+
+对于自定义表单控件，我们需要通过实现 `ControlValueAccessor` 接口来构建自己的控件值访问器，如果我们想要进行自定义验证，需要实现 `Validator` 接口。
