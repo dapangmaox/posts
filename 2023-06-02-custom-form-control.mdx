@@ -1,7 +1,7 @@
 ---
 title: Angular 自定义表单控件
 slug: angular-custom-formcontrol
-tags: ['Angular', 'TypeScript']
+tags: ["Angular", "TypeScript"]
 cover: cover_1
 description: 本文将通过一个实例，逐步构建一个功能齐全的自定义表单控件，该控件兼容模板驱动（Template Driven）和响应式表单（Reactive Forms）两种方式，并支持所有内置和自定义表单验证器。
 ---
@@ -21,11 +21,11 @@ Angular Forms 和 ReactiveForms 模块都提供了一系列内置指令，可以
 先来看一个例子：
 
 ```typescript
-import { Component } from '@angular/core';
-import { FormControl, FormGroup } from '@angular/forms';
+import { Component } from "@angular/core";
+import { FormControl, FormGroup } from "@angular/forms";
 
 @Component({
-  selector: 'app-root',
+  selector: "app-root",
   template: `
     <div [formGroup]="form">
       <input placeholder="Title" formControlName="title" />
@@ -84,7 +84,7 @@ Angular 内置的表单元素是自带验证功能的，我们的自定义组件
 
 ```typescript
 @Component({
-  selector: 'app-choose-quantity',
+  selector: "app-choose-quantity",
   template: `
     <div class="choose-quantity">
       <mat-icon (click)="onRemove()" color="primary"
@@ -94,7 +94,7 @@ Angular 内置的表单元素是自带验证功能的，我们的自定义组件
       <mat-icon (click)="onAdd()" color="primary">add_box</mat-icon>
     </div>
   `,
-  styleUrls: ['./choose-quantity.component.scss'],
+  styleUrls: ["./choose-quantity.component.scss"],
 })
 export class ChooseQuantityComponent {
   quantity = 0;
@@ -154,11 +154,11 @@ export class AppComponent {
 以下是已经实现了 `ControlValueAccessor` 接口的组件示例：
 
 ```typescript
-import { Component, Input } from '@angular/core';
-import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
+import { Component, Input } from "@angular/core";
+import { ControlValueAccessor, NG_VALUE_ACCESSOR } from "@angular/forms";
 
 @Component({
-  selector: 'app-choose-quantity',
+  selector: "app-choose-quantity",
   template: `
     <div class="choose-quantity">
       <mat-icon (click)="onRemove()" color="primary"
@@ -168,7 +168,7 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
       <mat-icon (click)="onAdd()" color="primary">add_box</mat-icon>
     </div>
   `,
-  styleUrls: ['./choose-quantity.component.scss'],
+  styleUrls: ["./choose-quantity.component.scss"],
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,
@@ -308,8 +308,6 @@ markAsTouched() {
 
 打开 devtools 可以看到，在第一次点击控件的时候，class 会从 `ng-untouched` 变为 `ng-touched`。
 
-![截屏2023-05-20 16.07.35](https://notes-1312649150.cos.ap-shanghai.myqcloud.com/%E6%88%AA%E5%B1%8F2023-05-20%2016.07.35.png)
-
 父表单还可以通过调用 `setDisabledState` 方法来启用或禁用其任何子控件。我们可以将禁用状态保存在成员变量 `disabled` 中，并使用它来打开和关闭增加/减少功能：
 
 ```typescript
@@ -407,7 +405,7 @@ export class ChooseQuantityComponent implements ControlValueAccessor {}
 这是最终的代码：
 
 ```typescript
-import { Component, Input } from '@angular/core';
+import { Component, Input } from "@angular/core";
 import {
   AbstractControl,
   ControlValueAccessor,
@@ -415,10 +413,10 @@ import {
   NG_VALUE_ACCESSOR,
   ValidationErrors,
   Validator,
-} from '@angular/forms';
+} from "@angular/forms";
 
 @Component({
-  selector: 'app-choose-quantity',
+  selector: "app-choose-quantity",
   template: `
     <div class="choose-quantity">
       <mat-icon (click)="onRemove()" color="primary"
@@ -428,7 +426,7 @@ import {
       <mat-icon (click)="onAdd()" color="primary">add_box</mat-icon>
     </div>
   `,
-  styleUrls: ['./choose-quantity.component.scss'],
+  styleUrls: ["./choose-quantity.component.scss"],
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,
@@ -517,11 +515,11 @@ export class ChooseQuantityComponent
 接下来让我们测试一下我们的自定义控件，创建这个表单并且添加一些标准验证：
 
 ```typescript
-import { Component } from '@angular/core';
-import { FormControl, FormGroup, Validators } from '@angular/forms';
+import { Component } from "@angular/core";
+import { FormControl, FormGroup, Validators } from "@angular/forms";
 
 @Component({
-  selector: 'app-root',
+  selector: "app-root",
   template: `
     <div [formGroup]="form">
       <app-choose-quantity
@@ -543,19 +541,15 @@ export class AppComponent {
     ]),
   });
 
-  totalQuantity = this.form.get('totalQuantity');
+  totalQuantity = this.form.get("totalQuantity");
 }
 ```
 
 我们的代码里有两个 `*ngIf` 指令，当满足条件时会展示对应的错误信息。
 
-运行代码，在 UI 上通过增加或减少 `quantity` 的值，当值大于 20 时，会显示 max 20 对应的错误信息：
+运行代码，在 UI 上通过增加或减少 `quantity` 的值，当值大于 20 时，会显示 max 20 对应的错误信息。
 
-![截屏2023-05-21 16.07.49](https://notes-1312649150.cos.ap-shanghai.myqcloud.com/%E6%88%AA%E5%B1%8F2023-05-21%2016.07.49.png)
-
-相反，当减少值到小于等于 0 时，`errors` 对象会包含我们自定义的 `mustBePositive` 对象，会展示如下信息：
-
-![截屏2023-05-21 16.08.06](https://notes-1312649150.cos.ap-shanghai.myqcloud.com/%E6%88%AA%E5%B1%8F2023-05-21%2016.08.06.png)
+相反，当减少值到小于等于 0 时，`errors` 对象会包含我们自定义的 `mustBePositive` 对象，会展示如下信息。
 
 到目前为止，我们已经实现了一个功能齐全的自定义表单控件，并且兼容模版驱动表单、响应式表单和所有的内置验证器。
 

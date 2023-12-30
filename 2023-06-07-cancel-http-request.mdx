@@ -57,7 +57,6 @@ xhr.onreadystatechange = (state) => {
 
 先点击 `Begin`，并且在 3 秒内点击 `Abort`，效果如下：
 
-![xhr](https://notes-1312649150.cos.ap-shanghai.myqcloud.com/images/48df6fb206fb49b2b79307edbf7d8f4d~tplv-k3u1fbpfcp-zoom-1.gif)
 
 可以看到，在点击 Abort 的时候，当前的 HTTP 请求的 Status 会变成 canceled 的状态。
 
@@ -100,7 +99,6 @@ function abortFetching() {
 
 同样先点击 `Begin`，并且在 3 秒内点击 `Abort`，效果如下：
 
-![fetch](https://notes-1312649150.cos.ap-shanghai.myqcloud.com/images/61290e384779497ca68938f82eb26324~tplv-k3u1fbpfcp-zoom-1.gif)
 
 可以看到，当点击 `Abort` 之后会调用 `controller` 实例的 `Abort` 方法，并且在 `singal` 上订阅的 `abort` event 也会被执行。与 XHR 不同的是，控制台会多打印一条 Error 信息。
 
